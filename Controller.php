@@ -23,7 +23,7 @@ use MapasCulturais\i;
  *  @property-read \MapasCulturais\Entities\Registration $requestedEntity The Requested Entity
  */
 // class AldirBlanc extends \MapasCulturais\Controllers\EntityController {
-class Controller extends \MapasCulturais\Controller
+class Controller extends \MapasCulturais\Controllers\Registration
 {
     protected $config = [];
 
@@ -84,12 +84,14 @@ class Controller extends \MapasCulturais\Controller
             throw new \Exception("O formato do parâmetro `to` é inválido.");
         }
 
+        $dql_from = '';
         if ($from) {
             //Data ínicial
             $dql_params['from'] (new DateTime($from))->format('Y-m-d 00:00');
             $dql_from = "e.sentTimestamp >= :from AND";
         }
 
+        $dql_to = '';
         if ($to) {
             //Data Final
             $dql_params['to'] (new DateTime($to))->format('Y-m-d 00:00');
@@ -196,18 +198,22 @@ class Controller extends \MapasCulturais\Controller
          * Array com header do documento CSV
          * @var array $headers
          */
-        $headers = array_keys($fields);
-
+        $headers =  array_merge(['NUMERO'], array_keys($fields), ['AVALIACAO', 'OBSERVACOES']);
+        
         $csv_data = [];
 
         foreach ($registrations as $i => $registration) {
-            $csv_data[$i] = [];
+            $csv_data[$i] = [
+                'NUMERO' => $registration->number
+            ];
 
             foreach ($fields as $key => $field) {
                 if (is_callable($field)) {
                     $value = $field($registration, $key);
+
                 } else if (is_string($field)) {
                     $value = $registration->$field;
+
                 } else if (is_int($field)) { 
                     $field = "field_{$field}";
                     $value = $registration->$field;
@@ -219,7 +225,7 @@ class Controller extends \MapasCulturais\Controller
                     $value = implode(',', $value);
                 }
 
-                $csv_data[$i] = $value;
+                $csv_data[$i][$key] = $value;
             }
         }
 
@@ -237,6 +243,7 @@ class Controller extends \MapasCulturais\Controller
         $stream = fopen($filename, 'w');
 
         $csv = Writer::createFromStream($stream);
+        $csv->setDelimiter(";");
 
         $csv->insertOne($headers);
 
@@ -344,14 +351,12 @@ class Controller extends \MapasCulturais\Controller
 
         $opportunity->checkPermission('@control');
 
-        $plugin = $app->plugins['AldirBlancDataprev'];
-
         $config = $app->plugins['AldirBlanc']->config;
 
         $inciso1_opportunity_id = $config['inciso1_opportunity_id'];
         $inciso2_opportunity_ids = $config['inciso2_opportunity_ids'];
 
-        $files = $opportunity->getFiles('dataprev');
+        $files = $opportunity->getFiles($this->plugin->getSlug());
         
         foreach ($files as $file) {
             if ($file->id == $file_id) {
@@ -367,14 +372,7 @@ class Controller extends \MapasCulturais\Controller
     /**
      * Importador para o inciso 1
      *
-     * Implementa o sistema de importação dos dados da dataprev para a lei AldirBlanc no inciso 1
-     * http://localhost:8080/dataprev/import_inciso1/
-     *
-     * Parametros to e from não são obrigatórios, caso nao informado retorna os últimos 7 dias de registros
-     *
-     * Paramentro type se alterna entre cpf e cnpj
-     *
-     * Paramentro status não é obrigatorio, caso não informado retorna todos com status 1
+     * http://localhost:8080/{slug}/import_inciso1/
      *
      */
     public function import_inciso1(Opportunity $opportunity, string $filename)
@@ -386,8 +384,6 @@ class Controller extends \MapasCulturais\Controller
         ini_set('max_execution_time', 0);
         ini_set('memory_limit', '768M');
 
-        // Pega as configurações no arquivo config-csv-inciso1.php
-        $conf_csv = $this->config['csv_inciso1'];
 
         //verifica se o mesmo esta no servidor
         if (!file_exists($filename)) {
@@ -403,11 +399,11 @@ class Controller extends \MapasCulturais\Controller
         $csv = Reader::createFromStream($stream);
 
         //Define o limitador do arqivo (, ou ;)
-        $csv->setDelimiter(";");
+        // $csv->setDelimiter(";");
 
         //Seta em que linha deve se iniciar a leitura
         $header_temp = $csv->setHeaderOffset(0);
-
+        
         //Faz o processamento dos dados
         $stmt = (new Statement());
         $results = $stmt->process($csv);
@@ -418,262 +414,103 @@ class Controller extends \MapasCulturais\Controller
         if ($ext != "csv") {
             throw new Exception("Arquivo não permitido.");
         }
-
-        //Verifica se o arquivo esta dentro layout
+        
+        $header_file = [];
         foreach ($header_temp as $key => $value) {
             $header_file[] = $value;
             break;
-
         }
 
-        foreach ($header_file[0] as $key => $value) {
-            $header_line_csv[] = $key;
-
+        if(!isset($header_file[0]['NUMERO']) || !isset($header_file[0]['AVALIACAO']) || !isset($header_file[0]['OBSERVACOES'])) {
+            die('As colunas NUMERO, AVALIACAO e OBSERVACOES são obrigatórias');
         }
 
-        //Verifica se o layout do arquivo esta nos padroes enviados pela dataprev
-        $herder_layout = $conf_csv['herder_layout'];
-
-        if ($error_layout = array_diff_assoc($herder_layout, $header_line_csv)) {
-            throw new Exception("os campos " . json_encode($error_layout) . " estão divergentes do layout necessário.");
-
-        }
-
-        //Inicia a verificação dos dados do requerente
-        $evaluation = [];
-        $parameters = $conf_csv['acceptance_parameters'];
+        $slug = $this->plugin->slug;
+        $name = $this->plugin->name;
         
-        $registrat_ids = [];
-
-        foreach ($results as $results_key => $item) {
-            $registrat_ids[] = $item['IDENTIF_CAD_ESTAD_CULT'];
-        }
-
-        $dql = "
-        SELECT
-            e.number,
-            e._agentsData
-        FROM
-            MapasCulturais\Entities\Registration e
-        WHERE
-            e.number in (:reg_ids)";
-
-        $query = $app->em->createQuery($dql);
-        $query->setParameters([
-            'reg_ids' => $registrat_ids
-        ]);
-
-        $agent_names = [];
-
-        foreach($query->getScalarResult() as $r) {
-            $data = json_decode($r['_agentsData']);
-            $agent_names[$r['number']] = $data->owner->nomeCompleto;
-        };
-        $raw_data_by_num = [];
-        // return;
-        foreach ($results as $results_key => $result) {
-            $raw_data_by_num[$result['IDENTIF_CAD_ESTAD_CULT']] = $result;
-            
-            $candidate = $result;
-            foreach ($candidate as $key_candidate => $value) {
-                if(in_array($key_candidate, $conf_csv['validation_cad_cultural'])) {
-                    continue;
-                }
-
-                if ($key_candidate == 'IDENTIF_CAD_ESTAD_CULT') {
-                    $evaluation[$results_key]['DADOS_DO_REQUERENTE']['N_INSCRICAO'] = $value;
-                }
-
-                if ($key_candidate == 'REQUERENTE_CPF') {
-                    $evaluation[$results_key]['DADOS_DO_REQUERENTE']['CPF'] = $value;
-                }
-
-                $field = isset($parameters[$key_candidate]) ? $parameters[$key_candidate] : "";
-                
-                if (is_array($field)) {
-
-                    if ($key_candidate == "REQUERENTE_DATA_NASCIMENTO") {
-                        $date = explode("/", $value);
-                        $date = new DateTime($date[2] . '-' . $date[1] . '-' . $date[0]);
-                        $idade = $date->diff(new DateTime(date('Y-m-d')));
-
-                        if ($idade->format('%Y') >= $field['positive'][0]) {
-                            $evaluation[$results_key]['VALIDATION'][$key_candidate] = true;
-
-                        } else {
-                            $evaluation[$results_key]['VALIDATION'][$key_candidate] = $field['response'];
-                        }
-
-                    }elseif ($key_candidate == "SITUACAO_CADASTRO") {
-
-                        if (in_array(trim($value), $field['positive'])) {
-                            $evaluation[$results_key]['VALIDATION']['SITUACAO_CADASTRO'] = true;
-
-                        } elseif (in_array(trim($value), $field['negative'])) {
-                            if(is_array($field['response'])){
-                                $evaluation[$results_key]['VALIDATION']['SITUACAO_CADASTRO'] = $field['response'][$value];
-
-                            }else{
-                                $evaluation[$results_key]['VALIDATION']['SITUACAO_CADASTRO'] = $field['response'];
-                                
-                            }
-                            
-
-                        }
-
-                    // A validação de cadastro cultural não é necessária pq o mapas é um cadastro válido 
-                    // }elseif (in_array($key_candidate,  $conf_csv['validation_cad_cultural'] )){
-                        
-                    //     if (in_array(trim($value), $field['positive'])) {
-                    //         $evaluation[$results_key]['VALIDATION']['VALIDA_CAD_CULTURAL'] = true;
-
-                    //     } elseif (in_array(trim($value), $field['negative'])) {
-                    //         $evaluation[$results_key]['VALIDATION']['VALIDA_CAD_CULTURAL'] = $field['response'];
-
-                    //     }
-                      
-                    }else {
-
-                        if (in_array(trim($value), $field['positive'])) {
-                            $evaluation[$results_key]['VALIDATION'][$key_candidate] = true;
-
-                        } elseif (in_array(trim($value), $field['negative'])) {
-                            $evaluation[$results_key]['VALIDATION'][$key_candidate] = $field['response'];
-
-                        }
-
-                    }
-
-                } else {
-
-                    if ($field) {
-                        if ($value === $field) {
-                            $evaluation[$results_key]['VALIDATION'][$key_candidate] = true;
-                        }
-
-                    }
-
-                }
-
-            }
-
-        }
-        
-        //Define se o requerente esta apto ou inapto levando em consideração as diretrizes de negocio
-        $result_aptUnfit = [];       
-        foreach ($evaluation as $key_evaluetion => $value) {
-            $result_validation = array_diff($value['VALIDATION'], $conf_csv['validation_reference']);
-            if (!$result_validation) {
-                $result_aptUnfit[$key_evaluetion] = $value['DADOS_DO_REQUERENTE'];
-                $result_aptUnfit[$key_evaluetion]['ACCEPT'] = true;
-            } else {
-                $result_aptUnfit[$key_evaluetion] = $value['DADOS_DO_REQUERENTE'];                
-                $result_aptUnfit[$key_evaluetion]['ACCEPT'] = false;
-                foreach ($value['VALIDATION'] as $value) {
-                    if (is_string($value)) {
-                        $result_aptUnfit[$key_evaluetion]['REASONS'][] = $value;
-                    }
-                }
-            }
-
-        }
-        $aprovados = array_values(array_filter($result_aptUnfit, function($item) {
-            if($item['ACCEPT']) {
-                return $item;
-            }
-        }));
-
-        $reprovados = array_values(array_filter($result_aptUnfit, function($item) {
-            if(!$item['ACCEPT']) {
-                return $item;
-            }
-        }));
-
         $app->disableAccessControl();
         $count = 0;
-        
-        foreach($aprovados as $r) {
-            $count++;
+        foreach ($results as $i => $line) {
+            $num = $line['NUMERO'];
+            $obs = $line['OBSERVACOES'];
+            $eval = $line['AVALIACAO'];
+
+            switch(strtolower($line['AVALIACAO'])){
+                case 'selecionado':
+                case 'selecionada':
+                    $result = '10';
+                break;
+
+                case 'invalido':
+                case 'inválido':
+                case 'invalida':
+                case 'inválida':
+                    $result = '2';
+                break;
+
+                case 'não selecionado':
+                case 'nao selecionado':
+                case 'não selecionada':
+                case 'nao selecionada':
+                    $result = '3';
+                break;
+                
+                case 'suplente':
+                    $result = '8';
+                break;
+                
+                default:
+                    die("O valor da coluna AVALIACAO da linha $i está incorreto. Os valores possíveis são 'selecionada', 'invalida', 'nao selecionada' ou 'suplente'");
+                
+            }
             
-            $registration = $app->repo('Registration')->findOneBy(['number' => $r['N_INSCRICAO']]);
+            $registration = $app->repo('Registration')->findOneBy(['number' => $num]);
             $registration->__skipQueuingPCacheRecreation = true;
             
             /* @TODO: implementar atualização de status?? */
-            if ($registration->dataprev_raw != (object) []) {
-                $app->log->info("Dataprev #{$count} {$registration} APROVADA - JÁ PROCESSADA");
+            if ($registration->{$slug . '_raw'} != (object) []) {
+                $app->log->info("$name #{$count} {$registration} $eval - JÁ PROCESSADA");
                 continue;
             }
             
-            $app->log->info("Dataprev #{$count} {$registration} APROVADA");
+            $app->log->info("$name #{$count} {$registration} $eval");
             
-            $registration->dataprev_raw = $raw_data_by_num[$registration->number];
-            $registration->dataprev_processed = $r;
-            $registration->dataprev_filename = $filename;
+            $registration->{$slug . '_raw'} = $line;
+            $registration->{$slug . '_filename'} = $filename;
             $registration->save(true);
     
-            $user = $app->plugins['AldirBlancDataprev']->getUser();
+            $user = $this->plugin->user;
 
             /* @TODO: versão para avaliação documental */
             $evaluation = new RegistrationEvaluation;
             $evaluation->__skipQueuingPCacheRecreation = true;
             $evaluation->user = $user;
             $evaluation->registration = $registration;
-            $evaluation->evaluationData = ['status' => "10", "obs" => 'selecionada'];
-            $evaluation->result = "10";
+            $evaluation->evaluationData = ['status' => $result, "obs" => $obs];
+            $evaluation->result = $result;
             $evaluation->status = 1;
 
             $evaluation->save(true);
 
             $app->em->clear();
-
         }
 
-        foreach($reprovados as $r) {
-            $count++;
+        $app->enableAccessControl();
 
-            $registration = $app->repo('Registration')->findOneBy(['number' => $r['N_INSCRICAO']]);
-            $registration->__skipQueuingPCacheRecreation = true;
-            
-            if ($registration->dataprev_raw != (object) []) {
-                $app->log->info("Dataprev #{$count} {$registration} REPROVADA - JÁ PROCESSADA");
-                continue;
-            }
-
-            $app->log->info("Dataprev #{$count} {$registration} REPROVADA");
-
-            $registration->dataprev_raw = $raw_data_by_num[$registration->number];
-            $registration->dataprev_processed = $r;
-            $registration->dataprev_filename = $filename;
-            $registration->save(true);
-
-            $user = $app->plugins['AldirBlancDataprev']->getUser();
-
-            /* @TODO: versão para avaliação documental */
-            $evaluation = new RegistrationEvaluation;
-            $evaluation->__skipQueuingPCacheRecreation = true;
-            $evaluation->user = $user;
-            $evaluation->registration = $registration;
-            $evaluation->evaluationData = ['status' => "2", "obs" => implode("\\n", $r['REASONS'])];
-            $evaluation->result = "2";
-            $evaluation->status = 1;
-
-            $evaluation->save(true); 
-
-            $app->em->clear();
-
-        }
-        
         // por causa do $app->em->clear(); não é possível mais utilizar a entidade para salvar
         $opportunity = $app->repo('Opportunity')->find($opportunity->id);
-        
+
+        $slug = $this->plugin->getSlug();
+
         $opportunity->refresh();
         $opportunity->name = $opportunity->name . ' ';
-        $files = $opportunity->dataprev_processed_files;
+        $files = $opportunity->{$slug . '_processed_files'};
         $files->{basename($filename)} = date('d/m/Y \à\s H:i');
-        $opportunity->dataprev_processed_files = $files;
+        $opportunity->{$slug . '_processed_files'} = $files;
         $opportunity->save(true);
-        $app->enableAccessControl();
         $this->finish('ok');
+        
+
     }
 
     public function import_inciso2() {

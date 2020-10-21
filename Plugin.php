@@ -24,15 +24,6 @@ class Plugin extends \AldirBlanc\PluginValidador
             
             'inciso1' => [
                 'número' => 'number',
-                'CPF' => 104,
-                'gênero' => 117,
-                'sexo' => 121,
-                'comunidade tradicional' => 105,
-                'área de atuação' => 123,
-                'banco' => 111,
-                'tipo de conta' => 8131,
-                'agência' => 112,
-                'num. conta' => 113
             ],
             'inciso2_cpf' => [
                 'número' => 'number'
@@ -85,40 +76,41 @@ class Plugin extends \AldirBlanc\PluginValidador
     function register()
     {
         $app = App::i();
+        $slug = $this->getSlug();
 
-        $this->registerOpportunityMetadata('dataprev_processed_files', [
+        $this->registerOpportunityMetadata($slug . '_processed_files', [
             'label' => 'Arquivos do Dataprev Processados',
             'type' => 'json',
             'private' => true,
             'default_value' => '{}'
         ]);
 
-        $this->registerRegistrationMetadata('dataprev_filename', [
+        $this->registerRegistrationMetadata($slug . '_filename', [
             'label' => 'Nome do arquivo de retorno do dataprev',
             'type' => 'string',
             'private' => true,
         ]);
 
-        $this->registerRegistrationMetadata('dataprev_raw', [
+        $this->registerRegistrationMetadata($slug . '_raw', [
             'label' => 'Dataprev raw data (csv row)',
             'type' => 'json',
             'private' => true,
             'default_value' => '{}'
         ]);
 
-        $this->registerRegistrationMetadata('dataprev_processed', [
+        $this->registerRegistrationMetadata($slug . '_processed', [
             'label' => 'Dataprev processed data',
             'type' => 'json',
             'private' => true,
             'default_value' => '{}'
         ]);
 
-        $file_group_definition = new \MapasCulturais\Definitions\FileGroup('dataprev', ['^text/csv$'], 'O arquivo enviado não é um csv.',false,null,true);
+        $file_group_definition = new \MapasCulturais\Definitions\FileGroup($slug, ['^text/csv$'], 'O arquivo enviado não é um csv.',false,null,true);
         $app->registerFileGroup('opportunity', $file_group_definition);
 
         parent::register();
 
-        $app->controller($this->getSlug())->plugin = $this;
+        $app->controller($slug)->plugin = $this;
     }
 
     function getName(): string
