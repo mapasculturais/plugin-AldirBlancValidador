@@ -399,7 +399,7 @@ class Controller extends \MapasCulturais\Controllers\Registration
         $csv = Reader::createFromStream($stream);
 
         //Define o limitador do arqivo (, ou ;)
-        // $csv->setDelimiter(";");
+        $csv->setDelimiter(";");
 
         //Seta em que linha deve se iniciar a leitura
         $header_temp = $csv->setHeaderOffset(0);
