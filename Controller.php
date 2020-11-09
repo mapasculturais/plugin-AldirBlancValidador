@@ -39,8 +39,6 @@ class Controller extends \MapasCulturais\Controllers\Registration
 
         $this->config = $app->plugins['AldirBlanc']->config;
         $this->config += $this->plugin->config;
-
-        eval(\psy\sh()); die;
     }
 
     protected function exportInit(Opportunity $opportunity) {
