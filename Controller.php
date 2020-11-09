@@ -39,6 +39,8 @@ class Controller extends \MapasCulturais\Controllers\Registration
 
         $this->config = $app->plugins['AldirBlanc']->config;
         $this->config += $this->plugin->config;
+
+        eval(\psy\sh()); die;
     }
 
     protected function exportInit(Opportunity $opportunity) {
@@ -336,6 +338,7 @@ class Controller extends \MapasCulturais\Controllers\Registration
     }
 
     public function GET_import() {
+        
         $this->requireAuthentication();
 
         $app = App::i();
@@ -360,11 +363,7 @@ class Controller extends \MapasCulturais\Controllers\Registration
         
         foreach ($files as $file) {
             if ($file->id == $file_id) {
-                if($opportunity_id == $inciso1_opportunity_id){
-                    $this->import_inciso1($opportunity, $file->getPath());
-                } else if (in_array($opportunity_id, $inciso2_opportunity_ids)) {
-                    $this->import_inciso2($opportunity, $file->getPath());
-                }
+                $this->import($opportunity, $file->getPath());
             }
         }
     }
@@ -375,7 +374,7 @@ class Controller extends \MapasCulturais\Controllers\Registration
      * http://localhost:8080/{slug}/import_inciso1/
      *
      */
-    public function import_inciso1(Opportunity $opportunity, string $filename)
+    public function import(Opportunity $opportunity, string $filename)
     {
 
         /**
@@ -408,7 +407,7 @@ class Controller extends \MapasCulturais\Controllers\Registration
         $stmt = (new Statement());
         $results = $stmt->process($csv);
 
-        //Verifica a extenção do arquivo
+        //Verifica a extenção do arquivo    
         $ext = pathinfo($filename, PATHINFO_EXTENSION);
 
         if ($ext != "csv") {
@@ -420,7 +419,7 @@ class Controller extends \MapasCulturais\Controllers\Registration
             $header_file[] = $value;
             break;
         }
-
+        
         if(!isset($header_file[0]['NUMERO']) || !isset($header_file[0]['AVALIACAO']) || !isset($header_file[0]['OBSERVACOES'])) {
             die('As colunas NUMERO, AVALIACAO e OBSERVACOES são obrigatórias');
         }
@@ -466,6 +465,7 @@ class Controller extends \MapasCulturais\Controllers\Registration
             
             $registration = $app->repo('Registration')->findOneBy(['number' => $num]);
             $registration->__skipQueuingPCacheRecreation = true;
+
             
             /* @TODO: implementar atualização de status?? */
             if ($registration->{$slug . '_raw'} != (object) []) {
