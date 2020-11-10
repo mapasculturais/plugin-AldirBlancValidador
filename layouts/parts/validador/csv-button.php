@@ -13,13 +13,13 @@ if ($inciso == 1){
     <a class="btn btn-default download btn-export-cancel"  ng-click="editbox.open('<?= $slug ?>-export-inciso1', $event)" rel="noopener noreferrer">CSV <?= $name ?></a>
 
     <!-- Formulário -->
-    <edit-box id="<?= $slug ?>-export-inciso1" position="top" title="<?php i::esc_attr_e('Exportar CSV Inciso I') ?>" cancel-label="Cancelar" close-on-cancel="true">
+    <edit-box id="<?= $slug ?>-export-inciso1" position="top" title="CSV <?=$name?> - Inciso I" cancel-label="Cancelar" close-on-cancel="true">
         <form class="form-export-<?= $slug ?>" action="<?=$route?>" method="POST">
       
             <label for="from">Data inícial</label>
             <input type="date" name="from" id="from">
             
-            <label for="from">Data final</label>  
+            <label for="to">Data final</label>  
             <input type="date" name="to" id="to">
 
             # Caso não queira filtrar entre datas, deixe os campos vazios.
@@ -35,7 +35,7 @@ else if ($inciso ==2){
     <a class="btn btn-default download form-export-clear" ng-click="editbox.open('<?= $slug ?>-export-inciso2', $event)" rel="noopener noreferrer">CSV <?= $name ?></a>
     
     <!-- Formulario para cpf -->
-    <edit-box id="<?= $slug ?>-export-inciso2" position="top" title="<?php i::esc_attr_e('Exportar CSV Inciso II') ?>" cancel-label="Cancelar" close-on-cancel="true">
+    <edit-box id="<?= $slug ?>-export-inciso2" position="top" title="CSV <?=$name?> - Inciso II" cancel-label="Cancelar" close-on-cancel="true">
         <form class="form-export-<?= $slug ?>" action="<?=$route?>" method="POST">
       
             <label for="from">Data inícial</label>
