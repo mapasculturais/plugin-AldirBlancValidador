@@ -425,11 +425,13 @@ class Controller extends \MapasCulturais\Controllers\Registration
         $app->disableAccessControl();
         $count = 0;
         foreach ($results as $i => $line) {
+            $count++;
+
             $num = $line['NUMERO'];
             $obs = $line['OBSERVACOES'];
             $eval = $line['AVALIACAO'];
 
-            switch(strtolower($line['AVALIACAO'])){
+            switch(strtolower($eval)){
                 case 'selecionado':
                 case 'selecionada':
                     $result = '10';
@@ -457,6 +459,7 @@ class Controller extends \MapasCulturais\Controllers\Registration
                     die("O valor da coluna AVALIACAO da linha $i está incorreto. Os valores possíveis são 'selecionada', 'invalida', 'nao selecionada' ou 'suplente'");
                 
             }
+
             
             $registration = $app->repo('Registration')->findOneBy(['number' => $num]);
             $registration->__skipQueuingPCacheRecreation = true;
@@ -464,7 +467,7 @@ class Controller extends \MapasCulturais\Controllers\Registration
             
             /* @TODO: implementar atualização de status?? */
             if ($registration->{$slug . '_raw'} != (object) []) {
-                $app->log->info("$name #{$count} {$registration} $eval - JÁ PROCESSADA");
+                $app->log->info("$name #{$count} opportunity/{$registration->opportunity->id} #{$registration->number} $eval - JÁ PROCESSADA");
                 continue;
             }
             
@@ -481,8 +484,15 @@ class Controller extends \MapasCulturais\Controllers\Registration
             $evaluation->__skipQueuingPCacheRecreation = true;
             $evaluation->user = $user;
             $evaluation->registration = $registration;
-            $evaluation->evaluationData = ['status' => $result, "obs" => $obs];
-            $evaluation->result = $result;
+
+
+            if ($opportunity->getEvaluationMethod()->slug == 'documentary') {
+                $evaluation->result = $result == '10' ? 1 : -1;
+                $evaluation->evaluationData = [$eval => $obs];
+            } else {
+                $evaluation->result = $result;
+                $evaluation->evaluationData = ['status' => $result, "obs" => $obs];
+            }
             $evaluation->status = 1;
 
             $evaluation->save(true);
