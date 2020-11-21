@@ -354,9 +354,6 @@ class Controller extends \MapasCulturais\Controllers\Registration
 
         $config = $app->plugins['AldirBlanc']->config;
 
-        $inciso1_opportunity_id = $config['inciso1_opportunity_id'];
-        $inciso2_opportunity_ids = $config['inciso2_opportunity_ids'];
-
         $files = $opportunity->getFiles($this->plugin->getSlug());
         
         foreach ($files as $file) {
@@ -509,9 +506,5 @@ class Controller extends \MapasCulturais\Controllers\Registration
         $this->finish('ok');
         
 
-    }
-
-    public function import_inciso2() {
-        
     }
 }
