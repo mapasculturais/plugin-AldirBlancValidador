@@ -29,7 +29,7 @@ $template = '
         <?php if(is_array($files)): foreach($files as $file): ?>
             <li id="file-<?php echo $file->id ?>" class="widget-list-item<?php if($this->isEditable()) echo \MapasCulturais\i::_e(' is-editable'); ?>" >
                 <a href="<?php echo $file->url;?>"><span><?php echo $file->description ? $file->description : $file->name;?></span></a>
-                <?php if($processed_at = $entity->validador_processed_files->{$file->name} ?? null): ?>
+                <?php if($processed_at = $entity->{$slug . '_processed_files'}->{$file->name} ?? null): ?>
                     - processado em <?= $processed_at ?>
                 <?php else: ?>
                 <div class="botoes">
