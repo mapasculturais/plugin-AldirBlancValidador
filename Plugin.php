@@ -31,6 +31,8 @@ class Plugin extends \AldirBlanc\PluginValidador
             'inciso2_cnpj' => [
                 'número' => 'number'
             ],
+
+            'incisos' => [1,2]
         ];
         $this->_config = $config;
         parent::__construct($config);
@@ -43,14 +45,16 @@ class Plugin extends \AldirBlanc\PluginValidador
         $plugin_aldirblanc = $app->plugins['AldirBlanc'];
         $plugin_validador = $this;
 
+        $opportunities_ids = $this->getOpportunitiesIds($this->config['incisos']);
+
         //botao de export csv
-        $app->hook('template(opportunity.single.header-inscritos):end', function () use($plugin_aldirblanc, $plugin_validador, $app){
+        $app->hook('template(opportunity.single.header-inscritos):end', function () use($plugin_aldirblanc, $plugin_validador, $app, $opportunities_ids){
             $inciso1Ids = [$plugin_aldirblanc->config['inciso1_opportunity_id']];
             $inciso2Ids = array_values($plugin_aldirblanc->config['inciso2_opportunity_ids']);
-            $opportunities_ids = array_merge($inciso1Ids, $inciso2Ids);
+            
             $requestedOpportunity = $this->controller->requestedEntity; //Tive que chamar o controller para poder requisitar a entity
             $opportunity = $requestedOpportunity->id;
-            if(($requestedOpportunity->canUser('@control')) && in_array($requestedOpportunity->id,$opportunities_ids) ) {
+            if(in_array($requestedOpportunity->id, $opportunities_ids) && $requestedOpportunity->canUser('@control')) {
                 $app->view->enqueueScript('app', 'aldirblanc', 'aldirblanc/app.js');
                 if (in_array($requestedOpportunity->id, $inciso1Ids)){
                     $inciso = 1;
@@ -63,9 +67,9 @@ class Plugin extends \AldirBlanc\PluginValidador
         });
 
         // uploads de CSVs 
-        $app->hook('template(opportunity.<<single|edit>>.sidebar-right):end', function () use($plugin_aldirblanc, $plugin_validador) {
+        $app->hook('template(opportunity.<<single|edit>>.sidebar-right):end', function () use($plugin_aldirblanc, $plugin_validador, $opportunities_ids) {
             $opportunity = $this->controller->requestedEntity; 
-            if($opportunity->canUser('@control')){
+            if(in_array($opportunity->id, $opportunities_ids) && $opportunity->canUser('@control')){
                 $this->part('validador/validador-uploads', ['entity' => $opportunity, 'plugin_aldirblanc' => $plugin_aldirblanc, 'plugin_validador' => $plugin_validador]);
             }
         });
